@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Detector IA - Autos y Camiones</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.9.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+  <style>
+    #container {
+      position: relative;
+      width: 640px;
+      height: 480px;
+    }
+    video, canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border: 1px solid black;
+    }
+    #output {
+      font-family: Arial;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h2>¿Qué está viendo la IA?</h2>
+  <div id="container">
+    <video id="video" autoplay muted playsinline></video>
+    <canvas id="canvas"></canvas>
+  </div>
+  <div id="output">Cargando modelo...</div>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const output = document.getElementById('output');
+
+    async function setupCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
+      return new Promise(resolve => {
+        video.onloadedmetadata = () => {
+          // Ajustamos el tamaño real del canvas al del video
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          resolve(video);
+        };
+      });
+    }
+
+    async function runDetection() {
+      const model = await cocoSsd.load();
+      output.innerText = 'Modelo cargado. Analizando...';
+
+      async function detect() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        const predictions = await model.detect(video);
+        let resultText = '';
+
+        predictions.forEach(pred => {
+          if (pred.score > 0.5) {
+            const [x, y, width, height] = pred.bbox;
+            ctx.strokeStyle = "lime";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, width, height);
+            ctx.fillStyle = "yellow";
+            ctx.font = "16px Arial";
+            ctx.fillText(`${pred.class} ${Math.round(pred.score * 100)}%`, x, y > 20 ? y - 5 : y + 15);
+
+            resultText += `• ${pred.class} (${Math.round(pred.score * 100)}%)<br>`;
+          }
+        });
+
+        output.innerHTML = resultText || "No se detectó nada con suficiente confianza.";
+        requestAnimationFrame(detect);
+      }
+
+      detect();
+    }
+
+    setupCamera().then(runDetection).catch(err => {
+      output.innerText = "Error accediendo a la cámara: " + err;
+    });
+  </script>
+</body>
+</html>

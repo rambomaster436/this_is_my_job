@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Detector IA - Imagen y Video</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+  <style>
+    canvas, video, img {
+      max-width: 640px;
+      border: 1px solid black;
+      margin-bottom: 10px;
+    }
+    #output {
+      font-family: Arial;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Detector IA - Imagen y Video</h2>
+
+  <label><strong>Subir imagen:</strong></label>
+  <input type="file" id="imageUpload" accept="image/*">
+  <br><br>
+
+  <label><strong>Subir video:</strong></label>
+  <input type="file" id="videoUpload" accept="video/*">
+  <br><br>
+
+  <video id="video" muted style="display:none;"></video>
+  <img id="image" style="display:none;">
+  <canvas id="canvas"></canvas>
+
+  <div id="output">Cargando modelo...</div>
+
+  <script>
+    const imageUpload = document.getElementById("imageUpload");
+    const videoUpload = document.getElementById("videoUpload");
+    const video = document.getElementById("video");
+    const image = document.getElementById("image");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const output = document.getElementById("output");
+
+    let model;
+
+    cocoSsd.load().then(m => {
+      model = m;
+      output.innerText = "Modelo cargado. Sube una imagen o video.";
+    });
+
+    // Función para dibujar predicciones
+    function drawPredictions(predictions) {
+      let resultText = '';
+      predictions.forEach(pred => {
+        if (pred.score > 0.7 && ['car', 'truck', 'bus', 'motorcycle'].includes(pred.class)) {
+            const [x, y, width, height] = pred.bbox;
+            ctx.strokeStyle = "lime";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, width, height);
+            ctx.fillStyle = "yellow";
+            ctx.font = "16px Arial";
+            ctx.fillText(`${pred.class} ${Math.round(pred.score * 100)}%`, x, y > 20 ? y - 5 : y + 15);
+
+            resultText += `• ${pred.class} (${Math.round(pred.score * 100)}%)<br>`;
+        }
+        });
+      output.innerHTML = resultText || "No se detectaron autos o camiones.";
+    }
+
+    // Procesar imagen
+    imageUpload.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      image.src = URL.createObjectURL(file);
+      image.onload = async () => {
+        image.style.display = "block";
+        video.style.display = "none";
+        canvas.width = image.width;
+        canvas.height = image.height;
+        ctx.drawImage(image, 0, 0);
+        const predictions = await model.detect(image);
+        drawPredictions(predictions);
+      };
+    });
+
+    // Procesar video
+    videoUpload.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      video.src = URL.createObjectURL(file);
+      video.load();
+      video.style.display = "block";
+      image.style.display = "none";
+
+      video.onloadedmetadata = () => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        video.play();
+      };
+
+      video.onplay = () => {
+        function detectFrame() {
+          if (video.paused || video.ended || !model) return;
+
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          model.detect(canvas).then(predictions => {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            drawPredictions(predictions);
+            requestAnimationFrame(detectFrame);
+          });
+        }
+        detectFrame();
+      };
+    });
+  </script>
+</body>
+</html>
